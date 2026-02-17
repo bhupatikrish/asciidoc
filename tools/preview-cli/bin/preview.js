@@ -30,52 +30,85 @@ async function start() {
         process.exit(1);
     }
 
-    // 2. Start BrowserSync
+    // 2. Load Local Metadata to determine Virtual Path
+    let localMeta;
+    try {
+        localMeta = yaml.load(await fs.readFile(DOCS_YAML, 'utf8'));
+    } catch (e) {
+        console.error('Error parsing docs.yaml:', e);
+        process.exit(1);
+    }
+
+    const { domain, system, product } = localMeta.hierarchy;
+    const VIRTUAL_PATH = `${domain}/${system}/${product}/v1`; // e.g., infrastructure/cloud/S3/v1
+    console.log(`Virtual Path: ${VIRTUAL_PATH}`);
+
+    // 3. Start BrowserSync
     browserSync.init({
         server: {
             baseDir: PORTAL_PUBLIC, // Serve the App Shell
             middleware: [
-                // API: Content Proxy (Local Adoc Converter)
                 async (req, res, next) => {
-                    if (req.url.startsWith('/api/content/')) {
-                        const page = req.url.replace('/api/content/', '');
-                        const adocPath = path.join(SRC_DIR, `${page}.adoc`);
+                    const url = req.url;
 
-                        if (await fs.exists(adocPath)) {
-                            try {
-                                const html = asciidoctor.convert(await fs.readFile(adocPath, 'utf8'), {
-                                    standalone: false,
-                                    attributes: { showtitle: true }
-                                });
-                                res.setHeader('Content-Type', 'text/html');
-                                res.end(html);
-                                return;
-                            } catch (e) {
-                                console.error('Conversion Error:', e);
-                                res.statusCode = 500;
-                                res.end('Error converting asciidoc');
-                                return;
+                    // API: Catalog (Mock with single local product)
+                    if (url === '/api/catalog') {
+                        const catalog = {
+                            [domain]: {
+                                [system]: [{
+                                    id: localMeta.id,
+                                    title: localMeta.title,
+                                    description: localMeta.description || `[Preview] ${localMeta.title}`,
+                                    path: VIRTUAL_PATH
+                                }]
                             }
-                        } else {
-                            // Try to look in dist/s3 if not found locally? 
-                            // Or just 404. For now 404 is fine.
-                            console.log(`404: ${adocPath}`);
+                        };
+                        res.setHeader('Content-Type', 'application/json');
+                        res.end(JSON.stringify(catalog));
+                        return;
+                    }
+
+                    // API: Metadata (Match virtual path)
+                    // URL: /api/metadata/infrastructure/cloud/S3/v1
+                    if (url.startsWith('/api/metadata/')) {
+                        // In preview, we only serve OUR metadata. 
+                        // Check if request matches our virtual path
+                        const reqPath = url.replace('/api/metadata/', '');
+                        if (reqPath === VIRTUAL_PATH) {
+                            // Reload meta from disk to support live changes
+                            const currentMeta = yaml.load(await fs.readFile(DOCS_YAML, 'utf8'));
+                            res.setHeader('Content-Type', 'application/json');
+                            res.end(JSON.stringify(currentMeta));
+                            return;
                         }
                     }
 
-                    // API: Metadata
-                    if (req.url === '/api/metadata') {
-                        try {
-                            // Merge local docs.yaml with some global nav?
-                            // For now, just serve local docs.yaml so we can see OUR links
-                            const doc = yaml.load(await fs.readFile(DOCS_YAML, 'utf8'));
-                            res.setHeader('Content-Type', 'application/json');
-                            res.end(JSON.stringify(doc));
-                            return;
-                        } catch (e) {
-                            res.statusCode = 500;
-                            res.end('Error loading metadata');
-                            return;
+                    // API: Content (Convert local adoc)
+                    // URL: /api/content/infrastructure/cloud/S3/v1/intro
+                    if (url.startsWith('/api/content/')) {
+                        const reqPath = url.replace('/api/content/', '');
+
+                        if (reqPath.startsWith(VIRTUAL_PATH)) {
+                            // Extract page name: intro
+                            const page = reqPath.replace(`${VIRTUAL_PATH}/`, '');
+                            const adocPath = path.join(SRC_DIR, `${page}.adoc`);
+
+                            if (await fs.exists(adocPath)) {
+                                try {
+                                    const html = asciidoctor.convert(await fs.readFile(adocPath, 'utf8'), {
+                                        standalone: false,
+                                        attributes: { showtitle: true }
+                                    });
+                                    res.setHeader('Content-Type', 'text/html');
+                                    res.end(html);
+                                    return;
+                                } catch (e) {
+                                    console.error('Conversion Error:', e);
+                                    res.statusCode = 500;
+                                    res.end('Error converting asciidoc');
+                                    return;
+                                }
+                            }
                         }
                     }
 
@@ -85,14 +118,19 @@ async function start() {
         },
         files: [
             // Watch local .adoc files -> Reload
-            path.join(SRC_DIR, '**/*.adoc'),
-            // Watch docs.yaml -> Reload
-            DOCS_YAML,
+            {
+                match: [path.join(SRC_DIR, '**/*.adoc'), DOCS_YAML],
+                fn: function (event, file) {
+                    this.reload();
+                }
+            },
             // Watch portal assets (optional, if hacking on portal)
             path.join(PORTAL_PUBLIC, '**/*')
         ],
         open: false, // Don't auto-open
-        notify: false
+        notify: false,
+        port: 3001, // Use different port to avoid conflict with BFF
+        ui: false
     });
 }
 

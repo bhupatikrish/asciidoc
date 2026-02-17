@@ -1,0 +1,15 @@
+= Integration Guide
+
+Connect your application to the SSO service.
+
+== Step 1: Register App
+Go to the admin console and create a new client.
+
+== Step 2: Configure SDK
+[source,javascript]
+----
+const auth = new SSOClient({
+  clientId: '123-456',
+  domain: 'security.example.com'
+});
+----

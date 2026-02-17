@@ -1,0 +1,11 @@
+id: SSO
+title: Single Sign On
+hierarchy:
+  domain: security
+  system: identity
+  product: sso
+navigation:
+  - Label: Introduction
+    url: /intro
+  - Label: Integration Guide
+    url: /integration

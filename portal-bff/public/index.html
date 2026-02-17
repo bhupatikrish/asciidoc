@@ -1,15 +1,17 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Docs Portal</title>
     <link rel="stylesheet" href="styles.css">
 </head>
+
 <body>
     <div id="app">
         <header>
-            <div class="logo">Cloud Docs</div>
+            <div class="logo" id="header-title">Enterprise Documentation</div>
             <nav id="top-nav">
                 <!-- Populated dynamically -->
             </nav>
@@ -18,12 +20,12 @@
         <div class="main-container">
             <aside id="sidebar">
                 <h3>Navigation</h3>
-                <ul id="side-nav-list">
+                <div id="main-nav">
                     <!-- Populated dynamically -->
-                </ul>
+                </div>
             </aside>
-            
-            <main id="content">
+
+            <main id="content-area">
                 <!-- Content injected here -->
                 <h1>Loading...</h1>
             </main>
@@ -35,4 +37,5 @@
     </div>
     <script src="main.js"></script>
 </body>
+
 </html>

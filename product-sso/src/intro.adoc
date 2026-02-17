@@ -1,0 +1,15 @@
+= Single Sign On (SSO)
+
+Secure your applications with our centralized identity provider.
+
+== Features
+*   SAML 2.0 Support
+*   OIDC Connect
+*   MFA Enforcement
+
+[mermaid]
+....
+graph LR
+    User -->|Login| SSO(Identity Provider)
+    SSO -->|Token| App(Your App)
+....

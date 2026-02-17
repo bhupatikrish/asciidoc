@@ -13,20 +13,25 @@ app.use(cors());
 app.use(express.static('public')); // Serve the App Shell (SPA)
 
 // API: Content Proxy
-// Endpoint: /api/content/:page?
-// Example: /api/content/intro -> reads MOCK_S3_ROOT/intro.html
+const DIST_ROOT = path.join(__dirname, '../dist');
+
+// Endpoint: /api/content/:path*
+// Example: /api/content/infrastructure/cloud/S3/v1/intro -> reads dist/infrastructure/cloud/S3/v1/intro.html
 app.get('/api/content/*', (req, res) => {
-    // Extract the relative path from the wildcard
-    const contentPath = req.params[0] || 'intro';
+    // Extract the full relative path from the wildcard
+    const contentPath = req.params[0];
+    if (!contentPath) {
+        return res.status(400).json({ error: 'Missing content path' });
+    }
 
     // Security: Prevent directory traversal
     const safePath = path.normalize(contentPath).replace(/^(\.\.[\/\\])+/, '');
 
-    // Construct full file path (assuming .html for fragments)
-    // In a real app, this would map URL -> S3 Key
-    let filePath = path.join(MOCK_S3_ROOT, safePath);
+    // Construct full file path
+    // We map the URL path directly to the filesystem path under dist/
+    let filePath = path.join(DIST_ROOT, safePath);
 
-    // Append .html if missing (simple logic for POC)
+    // Append .html if missing
     if (!path.extname(filePath)) {
         filePath += '.html';
     }
@@ -38,27 +43,94 @@ app.get('/api/content/*', (req, res) => {
             console.error('File not found:', filePath);
             return res.status(404).json({ error: 'Content not found' });
         }
-
-        // TODO: Add Sanitization here (DOMPurify)
-        // const clean = DOMPurify.sanitize(data);
-
         res.send(data);
     });
 });
 
 // API: Navigation/Metadata
-app.get('/api/metadata', (req, res) => {
-    const metaPath = path.join(MOCK_S3_ROOT, 'docs.yaml');
-    // In a real app, we'd probably convert YAML to JSON here or serve JSON directly
-    // For this POC, we'll just send the file content (Frontend can parse or we parse here)
-    // To keep it simple, let's try to send JSON if possible, but reading raw file for now.
-    // Actually, let's use the yaml parser to be nice to the frontend.
+// Endpoint: /api/metadata/:path*
+// Example: /api/metadata/infrastructure/cloud/S3/v1 -> reads dist/infrastructure/cloud/S3/v1/docs.yaml
+app.get('/api/metadata/*', (req, res) => {
+    const metaPath = req.params[0];
+    if (!metaPath) {
+        return res.status(400).json({ error: 'Missing metadata path' });
+    }
+
+    const safePath = path.normalize(metaPath).replace(/^(\.\.[\/\\])+/, '');
+    const fullPath = path.join(DIST_ROOT, safePath, 'docs.yaml');
+
+    console.log(`Fetching metadata: ${safePath} -> ${fullPath}`);
+
     const yaml = require('js-yaml');
+    fs.readFile(fullPath, 'utf8', (err, data) => {
+        if (err) {
+            console.error('Metadata not found:', fullPath);
+            return res.status(404).json({ error: 'Metadata not found' });
+        }
+        try {
+            const doc = yaml.load(data);
+            res.json(doc);
+        } catch (e) {
+            console.error('Error parsing YAML:', e);
+            res.status(500).json({ error: 'Invalid metadata format' });
+        }
+    });
+});
+
+// API: Catalog
+// Scans dist/infrastructure to find all docs.yaml files
+app.get('/api/catalog', async (req, res) => {
     try {
-        const doc = yaml.load(fs.readFileSync(metaPath, 'utf8'));
-        res.json(doc);
+        const catalog = {};
+        // Scan Mock S3 Root
+        // Structure: dist/{domain}/{system}/{product}/{version}/docs.yaml
+        // We need to walk the tree.
+
+        async function scanDir(dir, depth) {
+            const entries = await fs.promises.readdir(dir, { withFileTypes: true });
+            for (const entry of entries) {
+                const fullPath = path.join(dir, entry.name);
+                if (entry.isDirectory()) {
+                    await scanDir(fullPath, depth + 1);
+                } else if (entry.name === 'docs.yaml') {
+                    // Found a product!
+                    try {
+                        const yaml = require('js-yaml');
+                        const doc = yaml.load(await fs.promises.readFile(fullPath, 'utf8'));
+
+                        const { domain, system, product } = doc.hierarchy;
+
+                        if (!catalog[domain]) catalog[domain] = {};
+                        if (!catalog[domain][system]) catalog[domain][system] = [];
+
+                        catalog[domain][system].push({
+                            id: doc.id,
+                            title: doc.title,
+                            description: doc.description || `Documentation for ${doc.title}`, // Add fallback description
+                            path: `${domain}/${system}/${product}/v1` // simplistic versioning
+                        });
+                    } catch (e) {
+                        console.error('Error parsing docs.yaml:', fullPath, e);
+                    }
+                }
+            }
+        }
+
+        /* 
+           NOTE: Our MOCK_S3_ROOT points to dist/infrastructure/cloud/S3/v1
+           But our new build script outputs to dist/{domain}/{system}...
+           So we need to scan upstream from MOCK_S3_ROOT to find "dist"
+           Let's redefine ROOT for catalog scanning.
+        */
+        const DIST_ROOT = path.resolve(__dirname, '../dist');
+        if (fs.existsSync(DIST_ROOT)) {
+            await scanDir(DIST_ROOT, 0);
+        }
+
+        res.json(catalog);
     } catch (e) {
-        res.status(500).json({ error: 'Failed to load metadata' });
+        console.error('Catalog Error:', e);
+        res.status(500).json({ error: 'Failed to load catalog' });
     }
 });
 
