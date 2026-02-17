@@ -1,0 +1,56 @@
+= Getting Started with S3 (UPDATED)
+
+This guide helps you set up your first bucket and upload objects.
+
+== Architecture
+The following diagram shows how the S3 service interacts with your applications.
+
+[mermaid]
+....
+graph TD
+    App[Application] -->|PutObject| API(S3 API)
+    API -->|Store| Storage[(Object Storage)]
+    Storage -->|Ack| API
+    API -->|200 OK| App
+....
+
+== Prerequisites
+
+[IMPORTANT]
+.Credentials Required
+====
+Ensure you have your **Access Key** and **Secret Key** ready before proceeding.
+====
+
+*   Cloud Account
+*   CLI Tool installed (`npm install -g s3-cli`)
+
+== Quick Start
+
+=== 1. Create a Bucket
+Use the CLI to create a new bucket.
+
+[source,bash]
+----
+$ s3-cli create-bucket --name my-app-data --region us-east-1
+----
+
+=== 2. Upload Files
+Upload your static assets or data.
+
+[source,bash]
+----
+$ s3-cli cp ./index.html s3://my-app-data/
+----
+
+[TIP]
+You can also use the web console to drag and drop files.
+
+=== 3. Verify
+List the objects to confirm the upload.
+
+[source,bash]
+----
+$ s3-cli ls s3://my-app-data/
+----
+

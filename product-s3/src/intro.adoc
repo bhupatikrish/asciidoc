@@ -1,0 +1,9 @@
+= S3 Object Storage
+
+Welcome to the **Cloud Object Storage** documentation.
+
+== Overview
+S3 provides scalable storage for data backup, archival, and analytics.
+
+*   [Getting Started](getting-started)
+*   [API Reference](api)

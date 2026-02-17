@@ -1,0 +1,11 @@
+id: S3
+title: Object Storage Service
+hierarchy:
+  domain: infrastructure
+  system: cloud
+  product: S3
+navigation:
+  - Label: Introduction
+    url: /intro
+  - Label: Getting Started
+    url: /getting-started
